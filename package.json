@@ -1,0 +1,25 @@
+{
+  "name": "process-control",
+  "version": "0.0.0",
+  "description": "node.js web services for process control",
+  "main": "app.js",
+  "directories": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github/buddy-ekb/process-control.git"
+  },
+  "scripts": {
+    "start": "export NODE_PATH=. && node app"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "latest",
+    "body-parser": "latest",
+    "pg": "latest",
+    "xmlbuilder": "latest",
+    "socket.io": "latest"
+  }
+}
