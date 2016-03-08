@@ -83,12 +83,7 @@
         }
     }
 
-    function allowCrossOriginRequests(req, res, next) {
-        res.header('Access-Control-Allow-Origin', '*');
-        next();
-    }
-
-    router.get('/get.php', requireViewParameter, allowCrossOriginRequests, function (req, res) {
+    router.get('/get.php', requireViewParameter, function (req, res) {
         var queryResult, enumTypes = {}, typeId = [];
         db.select(req.query.view)
             .then(function (result) {
@@ -132,6 +127,7 @@
                         enumTypes[column.dataTypeID].forEach(function (enumLabel) { colEle.ele('option', { 'value': enumLabel }, enumLabel); });
                     }
                 });
+                headEle.ele({ 'settings': { 'colwidth': { '#text': 'px' } } });
                 queryResult.rows.forEach(function (row) {
                     var rowEle = rowsEle.ele('row', idColumn in row ? { 'id': row.id } : null);
                     colList.forEach(function (colName) {
@@ -146,7 +142,7 @@
             });
     });
 
-    router.post('/update.php', requireViewParameter, allowCrossOriginRequests, function (req, res) {
+    router.post('/update.php', requireViewParameter, function (req, res) {
         if (!('ids' in req.body)) {
             return res.send(400).send('no ids in post data');
         }
