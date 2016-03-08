@@ -11,29 +11,42 @@
     var defaultColWidth = 70;
 
     var dataTypes = {
-        'DATE': 1082,
-        'TEXT': 25,
-        'INT': 23,
-        'INT8': 20,
         'BOOL': 16,
+        'SMALLINT': 21,
+        'INT': 23,
+        'INTary': 1007,
+        'INT8': 20,
         'NUMERIC': 1700,
-        'VARCHAR': 1043
+        'TEXT': 25,
+        'VARCHAR': 1043,
+        'DATE': 1082,
+        'TIMESTAMP': 1114,
+        'TIMESTAMPTZ': 1184
     };
 
     var colTypes = {};
-    colTypes[dataTypes.INT] = 'edn';
-    colTypes[dataTypes.INT8] = 'edn';
     colTypes[dataTypes.BOOL] = 'ch';
+    colTypes[dataTypes.SMALLINT] = 'edn';
+    colTypes[dataTypes.INT] = 'edn';
+    colTypes[dataTypes.INTary] = 'ed';
+    colTypes[dataTypes.INT8] = 'edn';
     colTypes[dataTypes.NUMERIC] = 'ed';
-    colTypes[dataTypes.VARCHAR] = 'ed';
     colTypes[dataTypes.TEXT] = 'txt';
+    colTypes[dataTypes.VARCHAR] = 'txt';
     colTypes[dataTypes.DATE] = 'dhxCalendar';
+    colTypes[dataTypes.TIMESTAMP] = 'ed';
+    colTypes[dataTypes.TIMESTAMPTZ] = 'ed';
 
     var colSort = {};
+    colSort[dataTypes.BOOL] = 'int';
+    colSort[dataTypes.SMALLINT] = 'int';
     colSort[dataTypes.INT] = 'int';
     colSort[dataTypes.INT8] = 'int';
-    colSort[dataTypes.BOOL] = 'int';
     colSort[dataTypes.DATE] = 'date';
+
+    function isTextCol(col) {
+        return col.dataTypeID == dataTypes.TEXT || col.dataTypeID == dataTypes.VARCHAR;
+    }
 
     function getColType(col) {
         if (col.name == idColumn)
@@ -53,9 +66,11 @@
             val = 0;
         }
         if (val instanceof Date) {
-            if (colInfo.dataTypeID != dataTypes.DATE)
-                throw new Error('unsupported date type: ' + colInfo.dataTypeID);
-            val = val.getDMY();
+            if (colInfo.dataTypeID == dataTypes.DATE) {
+                val = val.getDMY();
+            } else {
+                val = val.toString();
+            }
         }
         return val;
     }
@@ -68,8 +83,13 @@
         }
     }
 
-    router.get('/get.php', requireViewParameter, function (req, res) {
-        var queryResult, unkTypes = {}, typeId = [];
+    function allowCrossOriginRequests(req, res, next) {
+        res.header('Access-Control-Allow-Origin', '*');
+        next();
+    }
+
+    router.get('/get.php', requireViewParameter, allowCrossOriginRequests, function (req, res) {
+        var queryResult, enumTypes = {}, typeId = [];
         db.select(req.query.view)
             .then(function (result) {
                 queryResult = result;
@@ -77,8 +97,8 @@
                 result.fields
                     .filter(function (column) { return getColType(column) == null; })
                     .forEach(function (column) {
-                        if (!(column.dataTypeID in unkTypes)) {
-                            unkTypes[column.dataTypeID] = true;
+                        if (!(column.dataTypeID in enumTypes)) {
+                            enumTypes[column.dataTypeID] = true;
                             promises.push(db.query("SELECT e.enumlabel FROM pg_enum e WHERE e.enumtypid = $1", [ column.dataTypeID ]));
                             typeId.push(column.dataTypeID);
                         }
@@ -87,7 +107,11 @@
             })
             .then(function (udtResults) {
                 udtResults.forEach(function (udtResult, idx) {
-                    unkTypes[typeId[idx]] = udtResult.rows.map(function (row) { return row.enumlabel; });
+                    if (udtResult.rows.length) {
+                        enumTypes[typeId[idx]] = udtResult.rows.map(function (row) { return row.enumlabel; });
+                    } else {
+                        delete enumTypes[typeId[idx]];
+                    }
                 });
                 var colList = [], colRef = {};
                 var rowsEle = builder.create('rows', { encoding: 'UTF-8' });
@@ -98,14 +122,14 @@
                     var isId = (column.name == idColumn);
                     var colEle = headEle.ele('column', {
                         'width': isId || !('default_width' in req.query) ? defaultColWidth : req.query.default_width,
-                        'type': getColType(column) || ( column.dataTypeID in unkTypes ? 'coro' : 'txt' ),
+                        'type': getColType(column) || ( column.dataTypeID in enumTypes ? 'coro' : 'ed' ),
                         'editable': false,
                         'align': isId ? 'right' : '*',
                         'sort': getColSort(column),
                         'color': isId ? '#CCE2FE' : ''
                     }, column.name);
-                    if (column.dataTypeID in unkTypes) {
-                        unkTypes[column.dataTypeID].forEach(function (enumLabel) { colEle.ele('option', { 'value': enumLabel }, enumLabel); });
+                    if (column.dataTypeID in enumTypes) {
+                        enumTypes[column.dataTypeID].forEach(function (enumLabel) { colEle.ele('option', { 'value': enumLabel }, enumLabel); });
                     }
                 });
                 queryResult.rows.forEach(function (row) {
@@ -122,7 +146,7 @@
             });
     });
 
-    router.post('/update.php', requireViewParameter, function (req, res) {
+    router.post('/update.php', requireViewParameter, allowCrossOriginRequests, function (req, res) {
         if (!('ids' in req.body)) {
             return res.send(400).send('no ids in post data');
         }
@@ -147,23 +171,24 @@
                         }
                         var val = getVal(row, column.name, column);
                         if (req.body[key] != val) {
-                            tuples.push([ column.name, req.body[key] ]);
+                            tuples.push([ column.name, !isTextCol(column) && req.body[key] == '' ? null : req.body[key] ]);
                         }
                     }
                     return tuples.length ? db.update(req.query.view, tuples, " WHERE " + idColumn + " = $", [ id ]) : false;
                 })
             );
         });
+        var dataEle = builder.create('data', { encoding: 'UTF-8' });
         Promise.all(promises)
             .then(function (results) {
-                var dataEle = builder.create('data', { encoding: 'UTF-8' });
                 results.forEach(function (result, idx) {
                     dataEle.ele('action', { 'type': 'update', 'sid': ids[idx], 'tid': ids[idx] }, '');
                 });
                 res.send(dataEle.end({ pretty: false }));
             })
             .catch(function (err) {
-                res.status(500).send(err);
+                dataEle.ele('action', { 'type': 'error', 'sid': ids[0], 'tid': ids[0] }, err + '');
+                res.send(dataEle.end({ pretty: false }));
             });
     });
 

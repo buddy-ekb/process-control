@@ -46,6 +46,12 @@
         client.query("LISTEN " + config.listen_to);
     });
 
+    [1114, 1184].forEach(function (oid) { // timestamp, timestamptz
+        PG.types.setTypeParser(oid, function (val) {
+            return val;
+        });
+    });
+
     module.exports = {
         query: query,
         select: select,
