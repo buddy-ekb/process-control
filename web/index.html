@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>View: customers_view</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+	<link href='http://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'/>
+	<!-- framework libs -->
+	<link rel="stylesheet" href="vendor/bootstrap/bootstrap-3.0.0.min.css">
+	<script src="vendor/jquery/jquery-1.9.1.min.js"></script>
+	<!-- /framework libs -->
+	<!-- dhtmlxGrid -->
+	<link rel="stylesheet" type="text/css" href="vendor/dhtmlxGrid/dhtmlxgrid.css"/>
+	<script src="vendor/dhtmlxGrid/dhtmlxgrid.js"></script>
+	<!--script src="vendor/dhtmlxGrid/dhtmlxdataprocessor_debug.js"></script-->
+	<script src="vendor/noty/jquery.noty.packaged.min.js"></script>
+	<script src="socket.io/socket.io.js"></script> <!-- supplied from NodeJS -->
+	
+	<script>
+		var getURL = "api/get?view=customers_view&default_width=220";
+		var updateURL = "api/update?view=customers_view";
+		var tableGridObject, myDataProcessor;
+		function initTableGrid(){
+			// init grid and set its parameters
+			tableGridObject = new dhtmlXGridObject('gridbox');
+			tableGridObject.setImagePath("vendor/dhtmlxGrid/imgs/");
+			//enable selecting rows
+			tableGridObject.enableMarkedCells();
+			tableGridObject.enableBlockSelection();
+			
+			// on init
+            tableGridObject.attachEvent("onDhxCalendarCreated",function(myCal){
+                showSavedSettings();
+            });
+            
+			tableGridObject.init();
+			tableGridObject.splitAt(2);
+			tableGridObject.loadXML(getURL); // used just for demo purposes
+			myDataProcessor = new dataProcessor(updateURL); // lock feed url
+
+            //events
+            //error
+			myDataProcessor.defineAction("error",function(tag){
+				noty({
+					text: tag.firstChild.nodeValue,
+					type: 'error',
+					timeout: 5000
+				});
+				inlineLog('<strong class="error">Error: '+tag.firstChild.nodeValue+'</strong>');
+				return true;
+			});
+			//update event
+			myDataProcessor.attachEvent("onAfterUpdate",function(id,action){ inlineLog("Line with id:" + id + " " + action + "!"); return true; });
+
+			myDataProcessor.init(tableGridObject); // link dataprocessor to the grid
+		}
+		
+		//show saved parammeters like background of cell
+		function showSavedSettings(){
+		}
+
+		function inlineLog(str){
+			var p = document.getElementById("inline-log");
+			p.innerHTML = ""+str+"<br/>" + p.innerHTML;
+		}
+		
+		var iosocket = io.connect(location.protocol + '//' + location.host, { path: '/test/socket.io/' });
+		iosocket.on('notify', function (data) {
+			tableGridObject.updateFromXML(getURL);
+		});
+		
+	</script>
+	<!-- dhtmlxGrid -->
+	<style>
+        body{
+            font-family: 'Open Sans', sans-serif;
+        }
+        .error{
+            color: red;
+        }
+        #inline-log{
+            width    : 100%;
+            height   : 140px;
+            overflow : auto;
+            border   : 1px solid green;
+            padding  : 8px;
+        }
+        #gridbox{
+            width    : 100%;
+            height   : 650px;
+        }
+
+        .pick-color-container {
+            margin: 0px 5px;
+            width: 230px;
+            float: right;
+            margin-left: 20px;
+        }
+        .pick-color-item{
+            width:25px;
+            height:25px;
+            border:1px solid gray;
+            border-radius:2px;
+            display: inline-block;
+            cursor:pointer;
+        }
+        .pick-color-item:hover{
+            border:1px solid silver;
+        }
+        .clear_background{
+            margin-left: 15px;
+        }
+        .navbar{
+            margin-bottom:0;
+        }
+        div.gridbox_dhx_skyblue.gridbox table.obj tr td.cellselected {
+            background-color: transparent;
+            border: 2px dashed #A1A1A1;
+        }		
+        .dhtmlxGrid_selection {
+            opacity: .5;
+            filter: progid:DXImageTransform.Microsoft.Alpha(opacity=50);
+            background-color: transparent;
+            border: 2px dashed #414141;
+        }
+	</style>
+</head>
+<body onload="initTableGrid()">
+    <nav class="navbar navbar-default">
+      <div class="container-fluid">
+        <div class="navbar-header">
+          <a class="navbar-brand" href="#">
+            View: customers_view
+          </a>
+        </div>
+        
+          <form class="navbar-form navbar-right" role="color-picker">
+            Cell Background Color: 
+            <div class="pick-color-container">
+            	<div class="pick-color-item" style="background:#ffffff;" title="#ffffff"></div>
+            	<div class="pick-color-item" style="background:#ff0000;" title="#ff0000"></div>
+            	<div class="pick-color-item" style="background:#ff6600;" title="#ff6600"></div>
+            	<div class="pick-color-item" style="background:#ffff00;" title="#ffff00"></div>
+            	<div class="pick-color-item" style="background:#008000;" title="#008000"></div>
+            	<div class="pick-color-item" style="background:#0000ff;" title="#0000ff"></div>
+            	<div class="pick-color-item" style="background:#800080;" title="#800080"></div>
+            	<div class="pick-color-item" style="background:#000000;" title="#000000"></div>
+            </div>
+            <button type="button" class="clear_background">CLEAR</button>
+          </form>
+        
+      </div>
+    </nav>
+	<div id="gridbox"></div>
+	<div id="inline-log"></div>
+	<script type="text/javascript">
+		//init color pick
+		$(document).ready(function(){
+		    //pick color blocks
+			$('.pick-color-item').on('click', function(){
+				setBackgroundOnSelectedCells($(this).attr('title'));
+			});
+			
+			//clear background button event click
+			$(".clear_background").on('click', function(){
+			    doFunctionOnSelectedCells(function(id, field){
+			        clearBackgroundItem(id,field);
+			    });
+			});
+			
+			
+		});
+		//set background on selected cels
+		function setBackgroundOnSelectedCells(color){
+			doFunctionOnSelectedCells(function(id, field){
+				setBackgroundColor(id,field, color );
+			});
+		}
+		
+		function doFunctionOnSelectedCells(function2call){
+		    //[{ 4,0 }{ 4,1 }]=>id,field
+		    var markedArray   = tableGridObject.getMarked(),
+		        selectedBlock = tableGridObject.getSelectedBlock();
+		        
+		    //set background color of column for marked columns
+		    if(markedArray!=null)
+    		    for(var index in markedArray){
+    		        function2call.call(this, markedArray[index][0],markedArray[index][1]);
+    		    }
+		    
+		    //set background color of column for marked columns
+		    if(selectedBlock!=null)
+    		    for(var column = selectedBlock.LeftTopCol; column <= selectedBlock.RightBottomCol; column++){
+    		        for(var index = selectedBlock.LeftTopRow; index <= selectedBlock.RightBottomRow; index++){
+    		            //read id from first column
+    		            id = $('.obj').first().children().children().eq(index+1).children('td').first().html();
+    		            function2call.call(this, id, column);
+    		        }
+    		    }
+		}
+		
+		function setBackgroundColor(id,field,background){
+		    tableGridObject.setCellTextStyle(id,field,'background:' + background + ';');
+		    saveBackgroundToDB(field,id,background);
+		}
+		
+		function saveBackgroundToDB(field,id,background){
+		    $.ajax({
+		        'url' : 'proxy/settings.php',
+		        'data' : {
+    		        'action' : 'set_setting',
+    		        'view' : 'customers_view',
+    		        'field_index' : field,
+    		        'id_value' : id,
+    		        'setting_key' : 'backgroundColor',
+    		        'setting_value' : background,
+    		        't' : Math.random()
+    		    }});
+		}
+
+		
+		function clearBackgroundItem(id,field){
+		    tableGridObject.setCellTextStyle(id,field,'background:transparent;');
+		    deleteBackgroundFromDB(field,id);
+		}
+		
+		function deleteBackgroundFromDB(field,id,background){
+		    $.ajax({
+		        'url' : 'proxy/settings.php',
+		        'data' : {
+    		        'action' : 'del_setting',
+    		        'view' : 'customers_view',
+    		        'field_index' : field,
+    		        'id_value' : id,
+    		        'setting_key' : 'backgroundColor',
+    		        't' : Math.random()
+    		    }});
+		}
+	</script>
+</body>
+</html>

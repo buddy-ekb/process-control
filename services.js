@@ -33,7 +33,7 @@
     colTypes[dataTypes.NUMERIC] = 'ed';
     colTypes[dataTypes.TEXT] = 'txt';
     colTypes[dataTypes.VARCHAR] = 'txt';
-    colTypes[dataTypes.DATE] = 'dhxCalendar';
+    colTypes[dataTypes.DATE] = 'ed'; // 'dhxCalendar';
     colTypes[dataTypes.TIMESTAMP] = 'ed';
     colTypes[dataTypes.TIMESTAMPTZ] = 'ed';
 
@@ -83,8 +83,8 @@
         }
     }
 
-    router.get('/get.php', requireViewParameter, function (req, res) {
-        var queryResult, enumTypes = {}, typeId = [];
+    router.get('/get', requireViewParameter, function (req, res) {
+        var queryResult, enumTypes = {}, typeId = [], colWidth = ('default_width' in req.query) ? req.query.default_width : defaultColWidth;
         db.select(req.query.view)
             .then(function (result) {
                 queryResult = result;
@@ -116,7 +116,7 @@
                     colRef[column.name] = column;
                     var isId = (column.name == idColumn);
                     var colEle = headEle.ele('column', {
-                        'width': isId || !('default_width' in req.query) ? defaultColWidth : req.query.default_width,
+                        'width': isId ? defaultColWidth : colWidth,
                         'type': getColType(column) || ( column.dataTypeID in enumTypes ? 'coro' : 'ed' ),
                         'editable': false,
                         'align': isId ? 'right' : '*',
@@ -129,7 +129,7 @@
                 });
                 headEle.ele({ 'settings': { 'colwidth': { '#text': 'px' } } });
                 queryResult.rows.forEach(function (row) {
-                    var rowEle = rowsEle.ele('row', idColumn in row ? { 'id': row.id } : null);
+                    var rowEle = rowsEle.ele('row', idColumn in row ? { 'id': row[idColumn] } : null);
                     colList.forEach(function (colName) {
                         rowEle.ele({ 'cell': { '#cdata': getVal(row, colName, colRef[colName]) } });
                     });
@@ -142,7 +142,7 @@
             });
     });
 
-    router.post('/update.php', requireViewParameter, function (req, res) {
+    router.post('/update', requireViewParameter, function (req, res) {
         if (!('ids' in req.body)) {
             return res.send(400).send('no ids in post data');
         }

@@ -3,6 +3,7 @@
     var PG = require('pg');
 
     var config = require('./configuration');
+    var iosock = require('./iosock');
 
     function query(queryText, parameters) {
         return new Promise(function (resolve, reject) {
@@ -41,7 +42,9 @@
             console.log(err);
         }
         client.on('notification', function (msg) {
-            console.log(msg);
+            if (iosock.io) {
+                iosock.io.sockets.emit('notify', msg.payload);
+            }
         });
         client.query("LISTEN " + config.listen_to);
     });

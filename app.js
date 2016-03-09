@@ -9,13 +9,16 @@
 
     var app = express();
 
+    app.use(express.static(__dirname + '/web'));
+
     app.use(bodyParser.urlencoded({ // to support URL-encoded bodies
         extended: true
     }));
 
-    app.use('/', services);
+    app.use('/api', services);
 
-    app.listen(config.http_port, function () {
+    var server = app.listen(config.http_port, function () {
         console.log('Express server listening on port ' + config.http_port);
     });
+    require('./iosock').init(server);
 })(module, console);
