@@ -24,7 +24,7 @@
     pgColTypes[pgDataTypes.BOOL] = 'checkbox';
     pgColTypes[pgDataTypes.SMALLINT] = 'numeric';
     pgColTypes[pgDataTypes.INT] = 'numeric';
-    pgColTypes[pgDataTypes.INTary] = 'text';
+    pgColTypes[pgDataTypes.INTary] = 'array';
     pgColTypes[pgDataTypes.INT8] = 'numeric';
     pgColTypes[pgDataTypes.NUMERIC] = 'numeric';
     pgColTypes[pgDataTypes.VARCHAR] = 'text';
@@ -103,8 +103,13 @@
                         colType.readOnly = true;
                     }
                     var ct = getColType(column);
-                    if (ct && ct != 'text') {
-                        colType.type = ct;
+                    if (ct) {
+                        if (ct != 'text') {
+                            colType.nonEmpty = true;
+                        }
+                        if (ct != 'text' && ct != 'array') {
+                            colType.type = ct;
+                        }
                         if (column.dataTypeID == pgDataTypes.NUMERIC) {
                             colType.format = '0.00';
                         }

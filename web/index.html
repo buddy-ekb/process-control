@@ -72,7 +72,7 @@
                 });
 
                 Handsontable.hooks.add('beforeChange', function (changes, source) {
-                    if (source == 'edit' || source == 'autofill' || (source === undefined && changes && changes.length /* checkbox updating */)) {
+                    if (source == 'edit' || source == 'autofill' || source == 'paste' || (source === undefined && changes && changes.length /* checkbox updating */)) {
                         var forUpdate = [], changedCell = [];
                         var updateNo = updateSerial++;
                         $.each(changes, function (i, cell) {
@@ -88,7 +88,7 @@
                             }
                             beingUpdated[rowNum][colNum] = updateNo;
                             changedCell.push([rowNum, colNum]);
-                            if ('type' in colTypes[colNum] && value == "") { // non-text fields are must be null or non-empty
+                            if ('nonEmpty' in colTypes[colNum] && value === '') { // non-text fields are must be null or non-empty
                                 value = null;
                             }
                             forUpdate.push({ id: hot.getDataAtCell(cell[0], 0), column: hot.getColHeader(cell[1]), value: value });
@@ -113,6 +113,8 @@
                                 hot.render();
                             }
                         }, notyError);
+                    } else {
+                        //console.log(arguments);
                     }
                 }, hot);
 
