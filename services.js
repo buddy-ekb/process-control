@@ -24,9 +24,9 @@
     pgColTypes[pgDataTypes.BOOL] = 'checkbox';
     pgColTypes[pgDataTypes.SMALLINT] = 'numeric';
     pgColTypes[pgDataTypes.INT] = 'numeric';
-    pgColTypes[pgDataTypes.INTary] = 'array';
     pgColTypes[pgDataTypes.INT8] = 'numeric';
     pgColTypes[pgDataTypes.NUMERIC] = 'numeric';
+    pgColTypes[pgDataTypes.TEXT] = 'text';
     pgColTypes[pgDataTypes.VARCHAR] = 'text';
     pgColTypes[pgDataTypes.DATE] = 'text'; // 'date';
     pgColTypes[pgDataTypes.TIMESTAMP] = 'text'; // 'date';
@@ -49,6 +49,9 @@
         }
         if (colInfo.dataTypeID == pgDataTypes.NUMERIC && val != null) {
             val = +val;
+        }
+        if (val instanceof Array) {
+            val = val.toString();
         }
         if (val instanceof Date) {
             if (colInfo.dataTypeID == pgDataTypes.DATE) {
@@ -102,12 +105,12 @@
                     if (column.name == idColumn) {
                         colType.readOnly = true;
                     }
+                    if (isTextCol(column)) {
+                        colType.allowEmpty = true;
+                    }
                     var ct = getColType(column);
                     if (ct) {
                         if (ct != 'text') {
-                            colType.nonEmpty = true;
-                        }
-                        if (ct != 'text' && ct != 'array') {
                             colType.type = ct;
                         }
                         if (column.dataTypeID == pgDataTypes.NUMERIC) {

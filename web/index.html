@@ -88,7 +88,7 @@
                             }
                             beingUpdated[rowNum][colNum] = updateNo;
                             changedCell.push([rowNum, colNum]);
-                            if ('nonEmpty' in colTypes[colNum] && value === '') { // non-text fields are must be null or non-empty
+                            if (!('allowEmpty' in colTypes[colNum]) && value === '') { // non-text fields are must be null or non-empty
                                 value = null;
                             }
                             forUpdate.push({ id: hot.getDataAtCell(cell[0], 0), column: hot.getColHeader(cell[1]), value: value });
