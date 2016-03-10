@@ -19,7 +19,7 @@
 	<script>
             var getURL = "api/get?view=customers_view";
             var updateURL = "api/update?view=customers_view";
-            var hot;
+            var hot, colTypes;
 
             function notyError(msg) {
                 noty({
@@ -31,6 +31,7 @@
 
             function loadData() {
                 $.ajax(getURL).then(function (res) {
+                    colTypes = res.columns;
                     $.each(res.columns, function (i, col) {
                         if (col.type == 'date') {
                             $.each(res.data, function (j, row) {
@@ -71,18 +72,26 @@
                 });
 
                 Handsontable.hooks.add('beforeChange', function (changes, source) {
-                    if (source == 'edit' || source == 'autofill') {
-                        var forUpdate = [];
+                    if (source == 'edit' || source == 'autofill' || (source === undefined && changes && changes.length /* checkbox updating */)) {
+                        var forUpdate = [], changedCell = [];
                         var updateNo = updateSerial++;
                         $.each(changes, function (i, cell) {
-                            if (cell[2] == cell[3]) {
+                            if (cell[2] === cell[3]) {
                                 return; // no data has been changed
                             }
-                            if (!beingUpdated.hasOwnProperty(cell[0])) {
-                                beingUpdated[cell[0]] = {};
+                            var rowNum = cell[0], colNum = cell[1], value = cell[3];
+                            if (hot.sortIndex.length) {
+                                rowNum = hot.sortIndex[rowNum][0];
                             }
-                            beingUpdated[cell[0]][cell[1]] = updateNo;
-                            forUpdate.push({ id: hot.getDataAtCell(cell[0], 0), col: hot.getColHeader(cell[1]), value: cell[3] });
+                            if (!beingUpdated.hasOwnProperty(rowNum)) {
+                                beingUpdated[rowNum] = {};
+                            }
+                            beingUpdated[rowNum][colNum] = updateNo;
+                            changedCell.push([rowNum, colNum]);
+                            if ('type' in colTypes[colNum] && value == "") { // non-text fields are must be null or non-empty
+                                value = null;
+                            }
+                            forUpdate.push({ id: hot.getDataAtCell(cell[0], 0), column: hot.getColHeader(cell[1]), value: value });
                         });
                         if (!forUpdate.length) {
                             return;
@@ -93,13 +102,16 @@
                             data: JSON.stringify(forUpdate),
                             contentType: 'application/json; charset=utf-8'
                         }).then(function (res) {
-console.log(res);
-                            $.each(changes, function (i, cell) {
-                                if (beingUpdated[cell[0]][cell[1]] == updateNo) {
-                                    beingUpdated[cell[0]][cell[1]] = 0;
-                                }
-                            });
-                            hot.render();
+                            if (res.error) {
+                                notyError(res.error);
+                            } else {
+                                $.each(changedCell, function (i, cell) {
+                                    if (beingUpdated[cell[0]][cell[1]] == updateNo) {
+                                        beingUpdated[cell[0]][cell[1]] = 0;
+                                    }
+                                });
+                                hot.render();
+                            }
                         }, notyError);
                     }
                 }, hot);

@@ -139,47 +139,31 @@
         if (!(req.body instanceof Array)) {
             return res.status(400).send('invalid request body');
         }
-        var ids = [], promises = [];
-        
-        req.body.ids.split(',').forEach(function (id) {
-            ids.push(id);
-            promises.push(db.select(req.query.view, " WHERE t." + idColumn + " = $1", [ id ])
-                .then(function (result) {
-                    if (!result.rows.length) {
-                        return Promise.reject('row with id ' + id + ' disappeared');
-                    }
-                    var row = result.rows[0];
-                    var tuples = [];
-                    for (var i = 0; i < result.fields.length; i++) {
-                        var column = result.fields[i];
-                        var key = id + '_c' + i;
-                        if (!(key in req.body)) {
-                            return Promise.reject('missing key ' + key + ' in post data');
-                        }
-                        if (column.name == idColumn) {
-                            continue;
-                        }
-                        var val = getVal(row, column.name, column);
-                        if (req.body[key] != val) {
-                            tuples.push([ column.name, !isTextCol(column) && req.body[key] == '' ? null : req.body[key] ]);
-                        }
-                    }
-                    return tuples.length ? db.update(req.query.view, tuples, " WHERE " + idColumn + " = $", [ id ]) : false;
-                })
-            );
-        });
-        var dataEle = builder.create('data', { encoding: 'UTF-8' });
-        Promise.all(promises)
-            .then(function (results) {
-                results.forEach(function (result, idx) {
-                    dataEle.ele('action', { 'type': 'update', 'sid': ids[idx], 'tid': ids[idx] }, '');
-                });
-                res.send(dataEle.end({ pretty: false }));
-            })
+        var output = { success: [] };
+        db.begin().then(function (transaction) {
+            return req.body.reduce(function (cur, change) {
+                return cur.then(function () {
+                    return transaction.query("UPDATE " + req.query.view + " SET " + change.column + " = $1 WHERE " + idColumn + " = $2 RETURNING " + idColumn, [ change.value, change.id ])
+                        .then(function (result) {
+                            output.success.push(result.rows[0][idColumn]);
+                            return true;
+                        });
+                    });
+                }, Promise.resolve())
+            .then(transaction.commit.bind(transaction))
             .catch(function (err) {
-                dataEle.ele('action', { 'type': 'error', 'sid': ids[0], 'tid': ids[0] }, err + '');
-                res.send(dataEle.end({ pretty: false }));
+                transaction.rollback();
+                output = { error: err.toString() };
+                return false;
             });
+        })
+        .then(function () {
+            res.set('Content-Type', 'application/json; charset=utf-8');
+            res.send(JSON.stringify(output));
+        })
+        .catch(function (err) {
+            res.status(500).send(err);
+        });
     });
 
     module.exports = router;
