@@ -9,85 +9,120 @@
 	<link rel="stylesheet" href="vendor/bootstrap/bootstrap-3.0.0.min.css">
 	<script src="vendor/jquery/jquery-1.9.1.min.js"></script>
 	<!-- /framework libs -->
-	<!-- dhtmlxGrid -->
-	<link rel="stylesheet" type="text/css" href="vendor/dhtmlxGrid/dhtmlxgrid.css"/>
-	<script src="vendor/dhtmlxGrid/dhtmlxgrid.js"></script>
-	<!--script src="vendor/dhtmlxGrid/dhtmlxdataprocessor_debug.js"></script-->
 	<script src="vendor/noty/jquery.noty.packaged.min.js"></script>
-	<script src="socket.io/socket.io.js"></script> <!-- supplied from NodeJS -->
+	<!-- Handsontable bare files -->
+	<script src="handsontable.full.min.js"></script>
+	<link rel="stylesheet" media="screen" href="handsontable.full.min.css">
+
+	<script src="socket.io/socket.io.js"><!-- supplied from NodeJS --></script>
 	
 	<script>
-		var getURL = "api/get?view=customers_view&default_width=220";
-		var updateURL = "api/update?view=customers_view";
-		var tableGridObject, myDataProcessor;
-		function initTableGrid(){
-			// init grid and set its parameters
-			tableGridObject = new dhtmlXGridObject('gridbox');
-			tableGridObject.setImagePath("vendor/dhtmlxGrid/imgs/");
-			//enable selecting rows
-			tableGridObject.enableMarkedCells();
-			tableGridObject.enableBlockSelection();
-			
-			// on init
-            tableGridObject.attachEvent("onDhxCalendarCreated",function(myCal){
-                showSavedSettings();
+            var getURL = "api/get?view=customers_view";
+            var updateURL = "api/update?view=customers_view";
+            var hot;
+
+            function notyError(msg) {
+                noty({
+                    text: msg,
+                    type: 'error',
+                    timeout: 5000
+                });
+            }
+
+            function loadData() {
+                $.ajax(getURL).then(function (res) {
+                    $.each(res.columns, function (i, col) {
+                        if (col.type == 'date') {
+                            $.each(res.data, function (j, row) {
+                                row[i] = new Date(row[i]);
+                            });
+                        }
+                    });
+                    hot.updateSettings({
+                        colHeaders: res.colHeaders,
+                        columns: res.columns
+                    });
+                    hot.loadData(res.data);
+                }, notyError);
+            }
+
+            function initTableGrid() {
+                var beingUpdated = {};
+                var updateSerial = 1;
+
+                function updatingRenderer(instance, td, row, col, prop, value, cellProperties) {
+                    Handsontable.renderers.TextRenderer.apply(this, arguments);
+                    td.style.fontWeight = 'bold';
+                }
+
+                var $container = document.getElementById('gridbox');
+                hot = new Handsontable($container, {
+                    data: [],
+                    columnSorting: true,
+                    sortIndicator: true,
+                    cells: function (row, col, prop) {
+                        var cellProps = {};
+                        if (beingUpdated.hasOwnProperty(row) && beingUpdated[row].hasOwnProperty(col)) {
+                            // this approach speeds up rendering a bit
+                            cellProps.renderer = beingUpdated[row][col] ? updatingRenderer : Handsontable.renderers.Textrenderer;
+                        }
+                        return cellProps;
+                    }
+                });
+
+                Handsontable.hooks.add('beforeChange', function (changes, source) {
+                    if (source == 'edit' || source == 'autofill') {
+                        var forUpdate = [];
+                        var updateNo = updateSerial++;
+                        $.each(changes, function (i, cell) {
+                            if (cell[2] == cell[3]) {
+                                return; // no data has been changed
+                            }
+                            if (!beingUpdated.hasOwnProperty(cell[0])) {
+                                beingUpdated[cell[0]] = {};
+                            }
+                            beingUpdated[cell[0]][cell[1]] = updateNo;
+                            forUpdate.push({ id: hot.getDataAtCell(cell[0], 0), col: hot.getColHeader(cell[1]), value: cell[3] });
+                        });
+                        if (!forUpdate.length) {
+                            return;
+                        }
+                        $.ajax({
+                            url: updateURL,
+                            type: 'POST',
+                            data: JSON.stringify(forUpdate),
+                            contentType: 'application/json; charset=utf-8'
+                        }).then(function (res) {
+console.log(res);
+                            $.each(changes, function (i, cell) {
+                                if (beingUpdated[cell[0]][cell[1]] == updateNo) {
+                                    beingUpdated[cell[0]][cell[1]] = 0;
+                                }
+                            });
+                            hot.render();
+                        }, notyError);
+                    }
+                }, hot);
+
+                loadData();
+            }
+
+            var iosocket = io.connect(location.protocol + '//' + location.host, { path: '/test/socket.io/' });
+            iosocket.on('notify', function (data) {
+                loadData();
             });
-            
-			tableGridObject.init();
-			tableGridObject.splitAt(2);
-			tableGridObject.loadXML(getURL); // used just for demo purposes
-			myDataProcessor = new dataProcessor(updateURL); // lock feed url
-
-            //events
-            //error
-			myDataProcessor.defineAction("error",function(tag){
-				noty({
-					text: tag.firstChild.nodeValue,
-					type: 'error',
-					timeout: 5000
-				});
-				inlineLog('<strong class="error">Error: '+tag.firstChild.nodeValue+'</strong>');
-				return true;
-			});
-			//update event
-			myDataProcessor.attachEvent("onAfterUpdate",function(id,action){ inlineLog("Line with id:" + id + " " + action + "!"); return true; });
-
-			myDataProcessor.init(tableGridObject); // link dataprocessor to the grid
-		}
-		
-		//show saved parammeters like background of cell
-		function showSavedSettings(){
-		}
-
-		function inlineLog(str){
-			var p = document.getElementById("inline-log");
-			p.innerHTML = ""+str+"<br/>" + p.innerHTML;
-		}
-		
-		var iosocket = io.connect(location.protocol + '//' + location.host, { path: '/test/socket.io/' });
-		iosocket.on('notify', function (data) {
-			tableGridObject.updateFromXML(getURL);
-		});
-		
-	</script>
-	<!-- dhtmlxGrid -->
-	<style>
+        </script>
+        <style>
         body{
             font-family: 'Open Sans', sans-serif;
+            height   : 100%;
         }
         .error{
             color: red;
         }
-        #inline-log{
-            width    : 100%;
-            height   : 140px;
-            overflow : auto;
-            border   : 1px solid green;
-            padding  : 8px;
-        }
         #gridbox{
             width    : 100%;
-            height   : 650px;
+            height   : 100%;
         }
 
         .pick-color-container {
@@ -113,17 +148,11 @@
         .navbar{
             margin-bottom:0;
         }
-        div.gridbox_dhx_skyblue.gridbox table.obj tr td.cellselected {
-            background-color: transparent;
-            border: 2px dashed #A1A1A1;
-        }		
-        .dhtmlxGrid_selection {
-            opacity: .5;
-            filter: progid:DXImageTransform.Microsoft.Alpha(opacity=50);
-            background-color: transparent;
-            border: 2px dashed #414141;
+
+        .htCore td {
+            white-space: nowrap;
         }
-	</style>
+        </style>
 </head>
 <body onload="initTableGrid()">
     <nav class="navbar navbar-default">
@@ -152,7 +181,6 @@
       </div>
     </nav>
 	<div id="gridbox"></div>
-	<div id="inline-log"></div>
 	<script type="text/javascript">
 		//init color pick
 		$(document).ready(function(){
@@ -200,8 +228,8 @@
 		}
 		
 		function setBackgroundColor(id,field,background){
-		    tableGridObject.setCellTextStyle(id,field,'background:' + background + ';');
-		    saveBackgroundToDB(field,id,background);
+//		    tableGridObject.setCellTextStyle(id,field,'background:' + background + ';');
+//		    saveBackgroundToDB(field,id,background);
 		}
 		
 		function saveBackgroundToDB(field,id,background){
@@ -220,8 +248,8 @@
 
 		
 		function clearBackgroundItem(id,field){
-		    tableGridObject.setCellTextStyle(id,field,'background:transparent;');
-		    deleteBackgroundFromDB(field,id);
+//		    tableGridObject.setCellTextStyle(id,field,'background:transparent;');
+//		    deleteBackgroundFromDB(field,id);
 		}
 		
 		function deleteBackgroundFromDB(field,id,background){

@@ -11,9 +11,8 @@
 
     app.use(express.static(__dirname + '/web'));
 
-    app.use(bodyParser.urlencoded({ // to support URL-encoded bodies
-        extended: true
-    }));
+    app.use(bodyParser.json());
+    app.use(bodyParser.urlencoded({ extended: true }));
 
     app.use('/api', services);
 

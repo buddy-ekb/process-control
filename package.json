@@ -19,7 +19,6 @@
     "express": "latest",
     "body-parser": "latest",
     "pg": "latest",
-    "xmlbuilder": "latest",
     "socket.io": "latest"
   }
 }

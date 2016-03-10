@@ -1,16 +1,12 @@
 (function (module) {
 
     var express = require('express');
-    var builder = require('xmlbuilder');
-
     var router = express.Router();
-
     var db = require('./database');
 
     var idColumn = 'id';
-    var defaultColWidth = 70;
 
-    var dataTypes = {
+    var pgDataTypes = {
         'BOOL': 16,
         'SMALLINT': 21,
         'INT': 23,
@@ -24,49 +20,38 @@
         'TIMESTAMPTZ': 1184
     };
 
-    var colTypes = {};
-    colTypes[dataTypes.BOOL] = 'ch';
-    colTypes[dataTypes.SMALLINT] = 'edn';
-    colTypes[dataTypes.INT] = 'edn';
-    colTypes[dataTypes.INTary] = 'ed';
-    colTypes[dataTypes.INT8] = 'edn';
-    colTypes[dataTypes.NUMERIC] = 'ed';
-    colTypes[dataTypes.TEXT] = 'txt';
-    colTypes[dataTypes.VARCHAR] = 'txt';
-    colTypes[dataTypes.DATE] = 'ed'; // 'dhxCalendar';
-    colTypes[dataTypes.TIMESTAMP] = 'ed';
-    colTypes[dataTypes.TIMESTAMPTZ] = 'ed';
-
-    var colSort = {};
-    colSort[dataTypes.BOOL] = 'int';
-    colSort[dataTypes.SMALLINT] = 'int';
-    colSort[dataTypes.INT] = 'int';
-    colSort[dataTypes.INT8] = 'int';
-    colSort[dataTypes.DATE] = 'date';
+    var pgColTypes = {};
+    pgColTypes[pgDataTypes.BOOL] = 'checkbox';
+    pgColTypes[pgDataTypes.SMALLINT] = 'numeric';
+    pgColTypes[pgDataTypes.INT] = 'numeric';
+    pgColTypes[pgDataTypes.INTary] = 'text';
+    pgColTypes[pgDataTypes.INT8] = 'numeric';
+    pgColTypes[pgDataTypes.NUMERIC] = 'numeric';
+    pgColTypes[pgDataTypes.VARCHAR] = 'text';
+    pgColTypes[pgDataTypes.DATE] = 'text'; // 'date';
+    pgColTypes[pgDataTypes.TIMESTAMP] = 'text'; // 'date';
+    pgColTypes[pgDataTypes.TIMESTAMPTZ] = 'text'; // 'date';
 
     function isTextCol(col) {
-        return col.dataTypeID == dataTypes.TEXT || col.dataTypeID == dataTypes.VARCHAR;
+        return col.dataTypeID == pgDataTypes.TEXT || col.dataTypeID == pgDataTypes.VARCHAR;
     }
 
     function getColType(col) {
-        if (col.name == idColumn)
-            return 'ro';
-        if (col.dataTypeID in colTypes)
-            return colTypes[col.dataTypeID];
+        if (col.dataTypeID in pgColTypes)
+            return pgColTypes[col.dataTypeID];
         return null;
     }
 
-    function getColSort(col) {
-        return col.dataTypeID in colSort ? colSort[col.dataTypeID] : 'str';
-    }
-
     function getVal(row, colName, colInfo) {
-        var val = (colName in row && row[colName] !== null) ? row[colName] : '';
-        if (colInfo.dataTypeID == dataTypes.BOOL && val == '') {
-            val = 0;
+        var val = colName in row ? row[colName] : null;
+        if (colInfo.dataTypeID == pgDataTypes.BOOL && val == null) {
+            val = false;
+        }
+        if (colInfo.dataTypeID == pgDataTypes.NUMERIC && val != null) {
+            val = +val;
         }
         if (val instanceof Date) {
-            if (colInfo.dataTypeID == dataTypes.DATE) {
+            if (colInfo.dataTypeID == pgDataTypes.DATE) {
                 val = val.getDMY();
             } else {
                 val = val.toString();
@@ -84,7 +69,7 @@
     }
 
     router.get('/get', requireViewParameter, function (req, res) {
-        var queryResult, enumTypes = {}, typeId = [], colWidth = ('default_width' in req.query) ? req.query.default_width : defaultColWidth;
+        var queryResult, enumTypes = {}, typeId = [];
         db.select(req.query.view)
             .then(function (result) {
                 queryResult = result;
@@ -108,34 +93,42 @@
                         delete enumTypes[typeId[idx]];
                     }
                 });
-                var colList = [], colRef = {};
-                var rowsEle = builder.create('rows', { encoding: 'UTF-8' });
-                var headEle = rowsEle.ele('head');
+                var colRef = {}, colList = [], colTypes = [];
                 queryResult.fields.forEach(function (column) {
-                    colList.push(column.name);
                     colRef[column.name] = column;
-                    var isId = (column.name == idColumn);
-                    var colEle = headEle.ele('column', {
-                        'width': isId ? defaultColWidth : colWidth,
-                        'type': getColType(column) || ( column.dataTypeID in enumTypes ? 'coro' : 'ed' ),
-                        'editable': false,
-                        'align': isId ? 'right' : '*',
-                        'sort': getColSort(column),
-                        'color': isId ? '#CCE2FE' : ''
-                    }, column.name);
+                    colList.push(column.name);
+                    var colType = {};
+                    colTypes.push(colType);
+                    if (column.name == idColumn) {
+                        colType.readOnly = true;
+                    }
+                    var ct = getColType(column);
+                    if (ct && ct != 'text') {
+                        colType.type = ct;
+                        if (column.dataTypeID == pgDataTypes.NUMERIC) {
+                            colType.format = '0.00';
+                        }
+/*                        if (column.dataTypeID == pgDataTypes.DATE) {
+                            colType.dateFormat = 'DD/MM/YYYY';
+                            colType.correctFormat = true;
+                        }*/
+                    }
                     if (column.dataTypeID in enumTypes) {
-                        enumTypes[column.dataTypeID].forEach(function (enumLabel) { colEle.ele('option', { 'value': enumLabel }, enumLabel); });
+                        colType.type = 'dropdown';
+                        colType.source = [];
+                        enumTypes[column.dataTypeID].forEach(function (enumLabel) { colType.source.push(enumLabel); });
                     }
                 });
-                headEle.ele({ 'settings': { 'colwidth': { '#text': 'px' } } });
+                var output = { colHeaders: colList, columns: colTypes, data: [] };
                 queryResult.rows.forEach(function (row) {
-                    var rowEle = rowsEle.ele('row', idColumn in row ? { 'id': row[idColumn] } : null);
+                    var outputRow = [];
                     colList.forEach(function (colName) {
-                        rowEle.ele({ 'cell': { '#cdata': getVal(row, colName, colRef[colName]) } });
+                        outputRow.push(getVal(row, colName, colRef[colName]));
                     });
+                    output.data.push(outputRow);
                 });
-                res.set('Content-Type', 'text/xml');
-                res.send(rowsEle.end({ pretty: false }));
+                res.set('Content-Type', 'application/json; charset=utf-8');
+                res.send(JSON.stringify(output));
             })
             .catch(function (err) {
                 res.status(500).send(err);
@@ -143,10 +136,11 @@
     });
 
     router.post('/update', requireViewParameter, function (req, res) {
-        if (!('ids' in req.body)) {
-            return res.send(400).send('no ids in post data');
+        if (!(req.body instanceof Array)) {
+            return res.status(400).send('invalid request body');
         }
         var ids = [], promises = [];
+        
         req.body.ids.split(',').forEach(function (id) {
             ids.push(id);
             promises.push(db.select(req.query.view, " WHERE t." + idColumn + " = $1", [ id ])
