@@ -19,7 +19,7 @@
 	<script>
             var getURL = "api/get?view=customers_view";
             var updateURL = "api/update?view=customers_view";
-            var hot, colTypes;
+            var hot, colTypes, beingUpdated = {};
 
             function notyError(msg) {
                 noty({
@@ -29,14 +29,57 @@
                 });
             }
 
+            function updatingRenderer(instance, td, row, col, prop, value, cellProperties) {
+                if (value instanceof Date) {
+                    dateRenderer.apply(this, arguments);
+                } else {
+                    Handsontable.renderers.TextRenderer.apply(this, arguments);
+                }
+                td.style.fontWeight = 'bold';
+            }
+
+            function dateRenderer(instance, td, row, col, prop, value, cellProperties) {
+                Handsontable.renderers.TextRenderer.apply(this, arguments);
+                if (value) {
+                    if (!(value instanceof Date)) {
+                        return;
+                    }
+                    td.innerHTML = value.getDMY();
+                }
+            }
+
+            var dateEditor = Handsontable.editors.TextEditor.prototype.extend();
+            dateEditor.prototype.prepare = function (row, col, prop, td, originalValue, cellProperties) {
+                Handsontable.editors.TextEditor.prototype.prepare.apply(this, arguments);
+                this.originalValue = this.originalValue instanceof Date ? this.originalValue.getDMY() : '';
+            };
+            dateEditor.prototype.getValue = function () {
+                var value = Handsontable.editors.TextEditor.prototype.getValue.apply(this, arguments);
+                var date = new Date(0);
+                var spl = value.split('/');
+                if (spl.length == 3) {
+                    date.setUTCFullYear(spl[2]);
+                    date.setUTCMonth(+spl[1] - 1);
+                    date.setUTCDate(spl[0]);
+                    if (isNaN(+date)) {
+                        date = new Date(value);
+                    }
+                }
+                return date;
+            };
+
             function loadData() {
                 $.ajax(getURL).then(function (res) {
                     colTypes = res.columns;
                     $.each(res.columns, function (i, col) {
                         if (col.type == 'date') {
                             $.each(res.data, function (j, row) {
-                                row[i] = new Date(row[i]);
+                                row[i] = row[i] ? new Date(row[i]) : new String('');
                             });
+                            delete col.type;
+                            col.isDate = true;
+                            col.renderer = dateRenderer;
+                            col.editor = dateEditor;
                         }
                     });
                     hot.updateSettings({
@@ -48,13 +91,7 @@
             }
 
             function initTableGrid() {
-                var beingUpdated = {};
                 var updateSerial = 1;
-
-                function updatingRenderer(instance, td, row, col, prop, value, cellProperties) {
-                    Handsontable.renderers.TextRenderer.apply(this, arguments);
-                    td.style.fontWeight = 'bold';
-                }
 
                 var $container = document.getElementById('gridbox');
                 hot = new Handsontable($container, {
@@ -76,8 +113,20 @@
                         var forUpdate = [], changedCell = [];
                         var updateNo = updateSerial++;
                         $.each(changes, function (i, cell) {
-                            if (cell[2] === cell[3]) {
-                                return; // no data has been changed
+                            if (colTypes[cell[1]].isDate) {
+                                if (!(cell[2] instanceof Date)) {
+                                    cell[2] = cell[2] == '' ? new String('') : new Date(cell[2]);
+                                }
+                                if (!(cell[3] instanceof Date)) {
+                                    cell[3] = cell[3] == '' ? new String('') : new Date(cell[3]);
+                                }
+                                if ((cell[2] == '' && cell[3] == '') || (cell[2] != '' && cell[3] != '' && +cell[2] == +cell[3])) {
+                                    return; // no date has been changed
+                                }
+                            } else {
+                                if (cell[2] === cell[3]) {
+                                    return; // no data has been changed
+                                }
                             }
                             var rowNum = cell[0], colNum = cell[1], value = cell[3];
                             if (hot.sortIndex.length) {
@@ -88,7 +137,7 @@
                             }
                             beingUpdated[rowNum][colNum] = updateNo;
                             changedCell.push([rowNum, colNum]);
-                            if (!('allowEmpty' in colTypes[colNum]) && value === '') { // non-text fields are must be null or non-empty
+                            if (!('allowEmpty' in colTypes[colNum]) && (value === '' || value instanceof String)) { // non-text fields are must be null or non-empty
                                 value = null;
                             }
                             forUpdate.push({ id: hot.getDataAtCell(cell[0], 0), column: hot.getColHeader(cell[1]), value: value });
@@ -125,6 +174,14 @@
             iosocket.on('notify', function (data) {
                 loadData();
             });
+
+            (function () {
+                function a0(n) { return n < 10 ? '0' + n : n; }
+
+                Date.prototype.getDMY = function () {
+                    return a0(this.getUTCDate()) + '/' + a0(this.getUTCMonth() + 1) + '/' + this.getUTCFullYear();
+                };
+            })();
         </script>
         <style>
         body{

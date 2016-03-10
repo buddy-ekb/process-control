@@ -28,7 +28,7 @@
     pgColTypes[pgDataTypes.NUMERIC] = 'numeric';
     pgColTypes[pgDataTypes.TEXT] = 'text';
     pgColTypes[pgDataTypes.VARCHAR] = 'text';
-    pgColTypes[pgDataTypes.DATE] = 'text'; // 'date';
+    pgColTypes[pgDataTypes.DATE] = 'date';
     pgColTypes[pgDataTypes.TIMESTAMP] = 'text'; // 'date';
     pgColTypes[pgDataTypes.TIMESTAMPTZ] = 'text'; // 'date';
 
@@ -53,13 +53,13 @@
         if (val instanceof Array) {
             val = val.toString();
         }
-        if (val instanceof Date) {
+/*        if (val instanceof Date) {
             if (colInfo.dataTypeID == pgDataTypes.DATE) {
                 val = val.getDMY();
             } else {
                 val = val.toString();
             }
-        }
+        }*/
         return val;
     }
 
