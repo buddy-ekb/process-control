@@ -72,31 +72,26 @@
     }
 
     router.get('/get', requireViewParameter, function (req, res) {
-        var queryResult, enumTypes = {}, typeId = [];
+        var queryResult, typeId = [];
         db.select(req.query.view)
             .then(function (result) {
+                var enumTypes = {};
                 queryResult = result;
-                var promises = [];
                 result.fields
                     .filter(function (column) { return getColType(column) == null; })
                     .forEach(function (column) {
                         if (!(column.dataTypeID in enumTypes)) {
                             enumTypes[column.dataTypeID] = true;
-                            promises.push(db.query("SELECT e.enumlabel FROM pg_enum e WHERE e.enumtypid = $1", [ column.dataTypeID ]));
                             typeId.push(column.dataTypeID);
                         }
                     });
-                return promises.length ? Promise.all(promises) : [];
+                return typeId.length ? db.query("SELECT enumtypid, array_agg(enumlabel::text) AS labels FROM pg_enum WHERE enumtypid IN (" + typeId + ") GROUP BY 1") : { rows: [] };
             })
-            .then(function (udtResults) {
-                udtResults.forEach(function (udtResult, idx) {
-                    if (udtResult.rows.length) {
-                        enumTypes[typeId[idx]] = udtResult.rows.map(function (row) { return row.enumlabel; });
-                    } else {
-                        delete enumTypes[typeId[idx]];
-                    }
+            .then(function (udtResult) {
+                var enumTypes = {}, colRef = {}, colList = [], colTypes = [];
+                udtResult.rows.forEach(function (udtRow, idx) {
+                    enumTypes[udtRow.enumtypid] = udtRow.labels;
                 });
-                var colRef = {}, colList = [], colTypes = [];
                 queryResult.fields.forEach(function (column) {
                     colRef[column.name] = column;
                     colList.push(column.name);
