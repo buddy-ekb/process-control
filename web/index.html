@@ -40,10 +40,7 @@
 
             function dateRenderer(instance, td, row, col, prop, value, cellProperties) {
                 Handsontable.renderers.TextRenderer.apply(this, arguments);
-                if (value) {
-                    if (!(value instanceof Date)) {
-                        return;
-                    }
+                if (value instanceof Date) {
                     td.innerHTML = value.getDMY();
                 }
             }
@@ -107,6 +104,18 @@
                         return cellProps;
                     }
                 });
+
+                var oldHotPopulateFromArray = hot.populateFromArray;
+                hot.populateFromArray = function (row, col, input, endRow, endCol, source, method, direction, deltas) {
+                    for (var i = col, j = 0; i <= (endCol == null ? col : endCol); i++, j++) {
+                        if (colTypes[i].isDate) {
+                            for (k = 0; k < input.length; k++) {
+                                input[k][j] = input[k][j] == '' ? new String('') : new Date(input[k][j]);
+                            }
+                        }
+                    }
+                    return oldHotPopulateFromArray.apply(this, arguments);
+                };
 
                 Handsontable.hooks.add('beforeChange', function (changes, source) {
                     if (source == 'edit' || source == 'autofill' || source == 'paste' || (source === undefined && changes && changes.length /* checkbox updating */)) {
