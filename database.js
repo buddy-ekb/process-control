@@ -23,7 +23,7 @@
     }
 
     function select(tableName, predicate, parameters) {
-        return query("SELECT * FROM " + tableName + " AS t" + (predicate || ""), parameters);
+        return query("SELECT t.* FROM " + tableName + " AS t" + (predicate || ""), parameters);
     }
 
     function update(tableName, tuples, predicate, parameters) {
@@ -37,9 +37,10 @@
         return query(queryText, params.concat(parameters));
     }
 
-    PG.connect(config.database, function(err, client) {
+    PG.connect(config.database, function (err, client) {
         if (err) {
             console.log(err);
+            return;
         }
         client.on('notification', function (msg) {
             if (iosock.io) {

@@ -146,9 +146,9 @@
         db.begin().then(function (transaction) {
             return req.body.reduce(function (cur, change) {
                 return cur.then(function () {
-                    return transaction.query("UPDATE " + req.query.view + " SET " + change.column + " = $1 WHERE " + idColumn + " = $2 RETURNING " + idColumn, [ change.value, change.id ])
+                    return transaction.query("UPDATE " + req.query.view + " SET " + change.column + " = $1 WHERE " + idColumn + " = $2", [ change.value, change.id ])
                         .then(function (result) {
-                            output.success.push(result.rows[0][idColumn]);
+                            output.success.push(change.id);
                             return true;
                         });
                     });
